@@ -52,7 +52,7 @@ This project will be utilising Zio modules to build an Indoor Environment Sensor
 
  
 
-Zio is a new line of open sourced, compact, and grid layout boards, fully integrated for Arduino and Qwiic ecosystem. Designed ideally for wearables, robotics, small-space limitations or other on the go projects. Check out other awesome Zio products here.
+Zio is a new line of open sourced, compact, and grid layout boards, fully integrated for Arduino and Qwiic ecosystem. Designed ideally for wearables, robotics, small-space limitations or other on the go projects. Check out other awesome Zio products [here](https://www.smart-prototyping.com/Zio).
 
 Check out the full step by step tutorial on building the kit [here.](https://www.smart-prototyping.com/blog/Build-An-Indoor-Environment-Sensor-Device)
 
