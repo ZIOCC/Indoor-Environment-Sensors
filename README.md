@@ -1,5 +1,5 @@
 # Indoor-Environment-Sensors
-Code for Indoor Environment Sensor Kit
+Don't have the kit yet? Purchase them here!
 
 Don’t neglect your health by ignoring the indoor quality where you live! This is a Qwiic Sensors kit that any DIY/Maker can set up within 15 munites or even less. You will get all kinds of sensor that may help you detect your living condition, including:
 
