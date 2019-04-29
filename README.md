@@ -1,4 +1,4 @@
-# Indoor-Environment-Sensors
+# Zio Qwiic Indoor Environment Sensors Kit
 ![](IESK-Kit.jpg)
 
 Don't have the kit yet? Purchase them [here](https://www.smart-prototyping.com/Zio-Qwiic-Indoor-Environment-Sensor-Kit)!
