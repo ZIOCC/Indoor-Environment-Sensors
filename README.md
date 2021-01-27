@@ -22,11 +22,11 @@ We use  Arduino compatible PsyFi32 (ESP32) as the kit’s brain, and also includ
 - [Zio Qwiic Hub](https://www.smart-prototyping.com/Zio-Qwiic-Hub.html)
 - [USB Cable](https://www.smart-prototyping.com/5pcs-Micro-USB-Cable)
 - [Qwiic Cable](https://www.smart-prototyping.com/Qwiic-200mm-Cable-10pcs):
-    5 x 5cm
-    5 x 10cm
-    10 x 20cm
-    5 x 50cm
-    2 x 15cm male header cable
+    5 x 5cm, 
+    5 x 10cm, 
+    10 x 20cm, 
+    5 x 50cm, 
+    2 x 15cm male header cable.
 
 Monitoring the quality of Indoor Environment helps improves health, quality of life, reduce stress and potential injuries at home, work or building. Improve your health and quality of life with our latest instalment of Zio Qwiic Indoor Environment Sensors Kit today!
 
