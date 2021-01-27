@@ -1,42 +1,48 @@
-// Wire Master Reader
-
-// Created 9 April 2019
-
+#include <WiFi.h>
 #include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BMP280.h>
-#include "Adafruit_SHT31.h"
-#include "SparkFunCCS811.h"
-#include "TSL2561.h"
-#include "RTClib.h"
-#include "Qwiic_LED_Stick.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_Sensor.h>
+#include "Adafruit_SHT31.h"
+#include <Adafruit_BMP280.h>
+#include "Adafruit_CCS811.h"
+#include <WiFiMulti.h>
+#include "TSL2561.h"
 
-Adafruit_BMP280 bmp; // I2C
+WiFiMulti WiFiMulti;
 Adafruit_SHT31 sht31 = Adafruit_SHT31();
-#define CCS811_ADDR 0x5A //Default I2C Address
-CCS811 mySensor(CCS811_ADDR);
-TSL2561 tsl(TSL2561_ADDR_FLOAT); 
-RTC_DS3231 rtc;
-LED LEDStick; //Create an object of the LED class
+Adafruit_BMP280 bmp; // I2C
+Adafruit_CCS811 ccs;
+WiFiClient  client;
 
-/******************************* OLED *******************************/
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
-
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define OLED_RESET 4
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-uint8_t Display_Flag=0;
-/******************************* PM2.5 *******************************/
-#define PM_address 0x12
+#if (SSD1306_LCDHEIGHT != 32)
+#error("Height incorrect, please fix Adafruit_SSD1306.h!");
+#endif
+
+#define led 5
+#define PMaddress 0x12
 #define HEADER_H  0x42
 #define HEADER_L  0x4D
 #define FRAME_LENGTH  0x1C
-
 uint8_t COMMAND = 0x00;
-uint8_t Sensor_Databufer[32];
+
+const char* ssid     = "Your SSID"; // Your SSID
+const char* password = "your wifi password"; // WiFi password
+
+const char* host = "api.thingspeak.com";
+String api_key = "ITYE5PN9RNOK6JMR"; // copy and paste the API Write Key provied by ThingSpeak Environment Sensor Data4
+
+float Air_Temperature = 0;
+float Air_Humidity = 0;
+float Soil_Temperature = 0;
+float Soil_Humidity = 0;
+float AirPressure = 0;
+int CO2=0;
+int TVOC=0;
 
 unsigned char cur_rx_data;
 unsigned char pre_rx_data;
@@ -54,326 +60,264 @@ int pm2_5=0;
 int pm10=0;
 
 unsigned short check_sum;
-/******************************* Loundness *******************************/
-#define COMMAND_LED_OFF     0x00
-#define COMMAND_LED_ON      0x01
-#define COMMAND_GET_VALUE        0x05
-#define COMMAND_NOTHING_NEW   0x99
 
-const byte Loundness_Address = 0x38;     //Default Address
-uint16_t ADC_VALUE=0;
+#define COMMAND_LOUDNESS_GET_VALUE        0x05
+#define COMMAND_LOUDNESS_NOTHING_NEW   0x99
+const byte LOUDNESS_qwiicAddress = 0x38;     //Default Address
+uint16_t ADC_LOUDNESS_VALUE=0;
 
-/******************************* DS3231 *******************************/
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-
-
-/******************************* setup *******************************/
+TSL2561 tsl(TSL2561_ADDR_FLOAT);
+uint8_t num=0; 
 void setup() {
-  Wire.begin();        // join i2c bus (address optional for master)
-  Serial.begin(115200);  // start serial for output
-  if (!bmp.begin()) {  
-    Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
-    while (1);
-  }
+    
+  Serial.begin(115200);
+  pinMode(led,OUTPUT);
+  WiFi.mode(WIFI_STA);
+  connectToWifi();
   if (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
     Serial.println("Couldn't find SHT31");
     while (1) delay(1);
   }
-  CCS811Core::status returnCode = mySensor.begin();
-  if (returnCode != CCS811Core::SENSOR_SUCCESS)
-  {
-    Serial.println("CCS811.begin() returned with an error.");
-    while (1); //Hang if there was a problem.
-  }
-  if (!tsl.begin()) {
-    Serial.println("No TSL2561 sensor?");
+  Serial.println("SHT31 Initializing...");
+  Serial.println(F("BMP280 test"));  
+  if (!bmp.begin()) {  
+    Serial.println(F("Could not find a valid BMP280 sensor, check wiring!"));
     while (1);
   }
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    while (1);
+  if(!ccs.begin()){
+    Serial.println("Failed to start CCS sensor! Please check your wiring.");
+    while(1);
   }
-  if (rtc.lostPower()) {
-    Serial.println("RTC lost power, lets set the time!");
-    // following line sets the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
-  }
-  testForConnectivity();
-  tsl.setGain(TSL2561_GAIN_16X);      // set 16x gain (for dim situations)
-  tsl.setTiming(TSL2561_INTEGRATIONTIME_13MS);  // shortest integration time (bright light)
-
-  LEDStick.begin();
-  LEDStick.setLEDBrightness(10);
-  LEDStick.LEDOff();
-
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
   }
   display.clearDisplay();
-  pinMode(5,OUTPUT);
+
+  testForConnectivity();
+
+  if (tsl.begin()) {
+    Serial.println("Found tsl sensor");
+  } else {
+    Serial.println("No tsl sensor?");
+    while (1);
+  }
+  tsl.setGain(TSL2561_GAIN_16X);      // set 16x gain (for dim situations
+  tsl.setTiming(TSL2561_INTEGRATIONTIME_13MS);  // shortest integration time (bright light)
+ //calibrate temperature sensor
+//  while(!ccs.available());
+//  float temp = ccs.calculateTemperature();
+//  ccs.setTempOffset(temp - 25.0); 
 }
 
 void loop() {
-  digitalWrite(5,HIGH);
-  LEDStick.setLEDColor(1, 0, 0, 180);
-  Read_RTC_Data();
-  Read_TSL2561_Sensordata();
-  Read_PM_Sensordata();
-  Read_BMP280_Sensordata();
-  Read_SHT31_Sensordata();
-  get_loundness_value();
-  Read_CCS811_Sensordata();
-  
-  Serial.println();
-  delay(1000);
-  digitalWrite(5,LOW);
-  LEDStick.LEDOff();
-  delay(2000);
-  Display_Flag++;
-  if(Display_Flag==7)
-  {Display_Flag=0;}
+
+ readSensors();
+ Send_Data(); //call function to send data to Thingspeak
+ delay(1000); 
 }
 
-/******************************* TSL2561 *******************************/
-void Read_RTC_Data()
+/********* Read Sensors value *************/
+void readSensors(void)
 {
-  DateTime now = rtc.now();
-  
-  Serial.print(now.year(), DEC);
-  Serial.print('/');
-  Serial.print(now.month(), DEC);
-  Serial.print('/');
-  Serial.print(now.day(), DEC);
-  Serial.print(" (");
-  Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-  Serial.print(") ");
-  Serial.print(now.hour(), DEC);
-  Serial.print(':');
-  Serial.print(now.minute(), DEC);
-  Serial.print(':');
-  Serial.print(now.second(), DEC);
-  Serial.println();
-  
-  if(Display_Flag==0)
+ Air_Temperature = sht31.readTemperature();
+ Air_Humidity = sht31.readHumidity();
+ Serial.print("Temperature:  ");
+ Serial.print(Air_Temperature);
+ Serial.print("Humidity:  ");
+ Serial.print(Air_Humidity);
+ 
+ Serial.print(F("Temperature = "));
+ Serial.print(bmp.readTemperature());
+ Serial.println(" *C");
+
+ Serial.print(F("Pressure = "));
+ AirPressure=bmp.readPressure();
+ Serial.print(AirPressure);
+ Serial.println(" Pa");
+
+ Serial.print(F("Approx altitude = "));
+ Serial.print(bmp.readAltitude(1013.25)); // this should be adjusted to your local forcase
+ Serial.println(" m");
+
+ if(ccs.available())
+ {
+  if(!ccs.readData()){
+  CO2=ccs.geteCO2();
+  TVOC=ccs.getTVOC();
+  Serial.print("CO2: ");
+  Serial.print(CO2);
+  Serial.print("ppm, TVOC: ");
+  Serial.print(TVOC);
+  Serial.println("ppb");
+  }
+ else{
+      Serial.println("CCS811 ERROR!");
+ }
+ }
+ readPMsensor();
+ 
+ uint16_t x = tsl.getLuminosity(TSL2561_VISIBLE); 
+ Serial.println(x, DEC);
+ uint32_t lum = tsl.getFullLuminosity();
+ uint16_t ir, full;
+ ir = lum >> 16;
+ full = lum & 0xFFFF;
+ Serial.print("IR: "); Serial.print(ir);   Serial.print("\t\t");
+ Serial.print("Full: "); Serial.print(full);   Serial.print("\t");
+ Serial.print("Visible: "); Serial.print(full - ir);   Serial.print("\t"); 
+ Serial.print("Lux: "); Serial.println(tsl.calculateLux(full, ir));
+
+ switch (num)
+ {
+  case 0:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("Loudness:");
+          display.print("ADC:");
+          display.print(get_loudness_value());
+          display.display();
+          delay(1);
+          }break;
+  case 1:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.print("IR: ");
+          display.println(ir);
+          display.print("Full: ");
+          display.println(full);
+          
+          display.display();
+          delay(1);
+          }break;
+  case 2:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.print("Vis: ");
+          display.println(full-ir);
+          display.print("Lux: ");
+          display.println(tsl.calculateLux(full, ir));
+          display.display();
+          delay(1);
+          }break;
+  case 3:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("Temp:");
+          display.print(Air_Temperature);
+          display.println(" *C");
+          display.display();
+          delay(1);
+          }break;
+  case 4:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("Hum:");
+          display.print(Air_Humidity);
+          display.println(" %");
+          display.display();
+          delay(1);
+          }break;
+  case 5:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("Pressure:");
+          display.print(AirPressure);
+          display.println(" Pa");
+          display.display();
+          delay(1);
+          }break;
+  case 6:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("CO2:");
+          display.print(CO2);
+          display.print(" ppm");
+          display.display();
+          delay(1);
+          }break;
+  case 7:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("TVOC: ");
+          display.print(TVOC);
+          display.print(" ppb");
+          display.display();
+          delay(1);
+          }break;
+  case 8:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("pm1.0:  ");
+          display.print(pm1_0);
+          display.println(" ug/m3");
+          display.display();
+          delay(1);
+          }break;
+  case 9:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("pm2.5:  ");
+          display.print(pm2_5);
+          display.println(" ug/m3");
+          display.display();
+          delay(1);
+          }break;
+  case 10:
+         {
+          display.setTextSize(2);
+          display.setTextColor(WHITE);
+          display.setCursor(0,0);
+          display.clearDisplay();
+          display.println("pm10:  ");
+          display.print(pm10);
+          display.println(" ug/m3");
+          display.display();
+          delay(1);
+          }break;
+  default:break;
+  }
+  num++;
+  if(num==10)
   {
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.clearDisplay();
-  display.print(now.year());
-  display.print("/");
-  display.print(now.month());
-  display.print("/");
-  display.print(now.day());
-  display.print(" (");
-  display.print(daysOfTheWeek[now.dayOfTheWeek()]);
-  display.println(") ");
-  display.print(now.hour());
-  display.print(":");
-  display.print(now.minute());
-  display.print(":");
-  display.print(now.second());
-  display.display();
-  }
-  }
-/******************************* TSL2561 *******************************/
-void Read_TSL2561_Sensordata()
-{
-  uint16_t x = tsl.getLuminosity(TSL2561_VISIBLE);
-  Serial.print("VISIBLE:  ");
-  Serial.println(x, DEC);
-  uint32_t lum = tsl.getFullLuminosity();
-  uint16_t ir, full;
-  ir = lum >> 16;
-  full = lum & 0xFFFF;
-  Serial.print("IR: "); Serial.print(ir);   Serial.print("\t\t");
-  Serial.print("Full: "); Serial.print(full);   Serial.print("\t");
-  Serial.print("Visible: "); Serial.print(full - ir);   Serial.print("\t");
-  
-  Serial.print("Lux: "); Serial.println(tsl.calculateLux(full, ir));
-  if(Display_Flag==1)
-  {
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0,0);
-  display.clearDisplay();
-  display.println("TSL2561 Light Sensor:");
-  display.print("VISIBLE: ");
-  display.println(x);
-  display.print("IR: ");
-  display.print(ir);
-  display.print("   Full:  ");
-  display.println(full);
-  display.print("Visible: ");
-  display.print(full-ir);
-  display.print(" Lux: ");
-  display.print(tsl.calculateLux(full, ir));
-  display.display();
-  }
-  }
-/******************************* CCS811 *******************************/
-void Read_CCS811_Sensordata()
-{
-  if (mySensor.dataAvailable())
-  {
-    //If so, have the sensor read and calculate the results.
-    //Get them later
-    mySensor.readAlgorithmResults();
-    uint16_t CO2=mySensor.getCO2();
-    uint16_t tVOC=mySensor.getTVOC();
-    Serial.print("CO2[");
-    //Returns calculated CO2 reading
-    Serial.print(CO2);
-    Serial.print("] tVOC[");
-    //Returns calculated TVOC reading
-    Serial.print(tVOC);
-    Serial.println("]");
-    if(Display_Flag==6)
-    {
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    display.clearDisplay();
-    display.println("CCS811 Sensor:");
-    display.print("CO2: ");
-    display.println(CO2);
-    display.print("tVOC:");
-    display.println(tVOC);
-    display.display();
+    num=0;
     }
-  }
-  }
-/******************************* Loundness *******************************/
-void loundness_ledOn() {
-  Wire.beginTransmission(Loundness_Address);
-  Wire.write(COMMAND_LED_ON);
-  Wire.endTransmission();
+ 
 }
-void loundness_ledOff() {
-  Wire.beginTransmission(Loundness_Address);
-  Wire.write(COMMAND_LED_OFF);
-  Wire.endTransmission();
-}
-void get_loundness_value() {
-  uint8_t dbA=0;
-  loundness_ledOff();
-  Wire.beginTransmission(Loundness_Address);
-  Wire.write(COMMAND_GET_VALUE); // command for status
-  Wire.endTransmission();    // stop transmitting //this looks like it was essential.
-
-  Wire.requestFrom(Loundness_Address, 2);    // request 1 bytes from slave device qwiicAddress
-
-  while (Wire.available()) { // slave may send less than requested
-  uint8_t ADC_VALUE_L = Wire.read(); 
-  uint8_t ADC_VALUE_H = Wire.read();
-  ADC_VALUE=ADC_VALUE_H;
-  ADC_VALUE<<=8;
-  ADC_VALUE|=ADC_VALUE_L;
-  dbA=map(ADC_VALUE,0,1023,0,140);
-  Serial.print("Loundness_VALUE(Max:1023):  ");
-  Serial.print(ADC_VALUE,DEC);
-  Serial.print("  Approx:  ");
-  Serial.print(dbA);
-  Serial.println("db");
-  }
-  uint16_t x=Wire.read(); 
-  if(Display_Flag==5)
-    {
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    display.clearDisplay();
-    display.println("Loundness Sensor:");
-    display.print("(Max:1023)  ");
-    display.println(ADC_VALUE);
-    display.print("Approx:  ");
-    display.print(dbA);
-    display.print(" db");
-    display.display();
-    }
-}
-void testForConnectivity() {
-  Wire.beginTransmission(Loundness_Address);
-  //check here for an ACK from the slave, if no ACK don't allow change?
-  if (Wire.endTransmission() != 0) {
-    Serial.println("Check connections. No slave attached.");
-    while (1);
-  }
-}
-
-/******************************* SHT31 *******************************/
-void Read_SHT31_Sensordata()
+/********* Read PMSensors value *************/
+void readPMsensor()
 {
-  float t = sht31.readTemperature();
-  float h = sht31.readHumidity();
-
-  if (! isnan(t)) {  // check if 'is not a number'
-    Serial.print("Temp *C = "); Serial.println(t);
-  } else { 
-    Serial.println("Failed to read temperature");
-  }
-  
-  if (! isnan(h)) {  // check if 'is not a number'
-    Serial.print("Hum. % = "); Serial.println(h);
-  } else { 
-    Serial.println("Failed to read humidity");
-  }
-  if(Display_Flag==4)
-    {
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    display.clearDisplay();
-    display.println("SHT31 Sensor:");
-    display.print("Temp *C = ");
-    display.println(t);
-    display.print("Hum. %  = ");
-    display.print(h);
-    display.display();
-    }
-  }
-
-/******************************* BMP280 *******************************/
-void Read_BMP280_Sensordata()
-{
-  Serial.print(F("Temperature = "));
-  Serial.print(bmp.readTemperature());
-  Serial.println(" *C");
-  
-  Serial.print(F("Pressure ="));
-  Serial.print(bmp.readPressure());
-  Serial.println("Pa");
-  
-  Serial.print(F("Approx altitude = "));
-  Serial.print(bmp.readAltitude(1013.25)); // this should be adjusted to your local forcase
-  Serial.println(" m");
-  if(Display_Flag==3)
-    {
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    display.clearDisplay();
-    display.println("BMP280 Sensor:");
-    display.print("Temperature=");
-    display.print(bmp.readTemperature());
-    display.println(" *C");
-    display.print("Pressure =");
-    display.print(bmp.readPressure());
-    display.println("Pa");
-    display.print("altitude =");
-    display.print(bmp.readAltitude(1013.25));
-    display.println(" m");
-    display.display();
-    }
-  }
-/******************************* PM2.5 *******************************/
-void Read_PM_Sensordata()
-{
-  Wire.requestFrom(PM_address, 32);
+    Wire.requestFrom(PMaddress, 32);
   while(Wire.available())
   {
     cur_rx_data = Wire.read();
@@ -455,7 +399,6 @@ void Read_PM_Sensordata()
                 Serial.print("pm1.0:  ");Serial.print(pm1_0,DEC);Serial.print("ug/m3");Serial.print("  ");
                 Serial.print("pm2.5:  ");Serial.print(pm2_5,DEC);Serial.print("ug/m3");Serial.print("  ");
                 Serial.print("pm10:  ");Serial.print(pm10,DEC);Serial.println("ug/m3");
-                
             }
             main_status = 0;    
             cur_rx_data = 0;
@@ -490,23 +433,104 @@ void Read_PM_Sensordata()
         break;
      } 
     }
-    if(Display_Flag==2)
-    {
-    display.setTextSize(1);
-    display.setTextColor(WHITE);
-    display.setCursor(0,0);
-    display.clearDisplay();
-    display.println("PMSA003I Sensor:");
-    display.print("pm1.0: ");
-    display.print(pm1_0);
-    display.println("ug/m3");
-    display.print("pm2.5: ");
-    display.print(pm2_5);
-    display.println("ug/m3");
-    display.print("pm10 : ");
-    display.print(pm10);
-    display.println("ug/m3");
-    display.display();
+  }
+void connectToWifi()
+{
+  // connection to a WiFi network
+  WiFiMulti.addAP(ssid, password);
+
+  Serial.println();
+  Serial.println();
+  Serial.print("Wait for WiFi... ");
+
+  while (WiFiMulti.run() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
     }
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+ }
+ 
+void Send_Data()
+{
+  // Use WiFiClient class to create TCP connections
+  WiFiClient client;
+
+  const int httpPort = 80;
+
+  if (!client.connect(host, httpPort)) {
+    Serial.println("connection failed");
+    return;
+  }
+  else
+  {
+    String data_to_send = api_key;
+    data_to_send += "&field1=";
+    data_to_send += String(Air_Temperature);
+    data_to_send += "&field2=";
+    data_to_send += String(Air_Humidity);
+    data_to_send += "&field3=";
+    data_to_send += String(pm1_0);
+    data_to_send += "&field4=";
+    data_to_send += String(pm2_5);
+    data_to_send += "&field5=";
+    data_to_send += String(pm10);
+    data_to_send += "&field6=";
+    data_to_send += String(CO2);
+    data_to_send += "&field7=";
+    data_to_send += String(TVOC);
+    data_to_send += "&field8=";
+    data_to_send += String(AirPressure);
+    data_to_send += "\r\n\r\n";
+
+    client.print("POST /update HTTP/1.1\n");
+    client.print("Host: api.thingspeak.com\n");
+    client.print("Connection: close\n");
+    client.print("X-THINGSPEAKAPIKEY: " + api_key + "\n");
+    client.print("Content-Type: application/x-www-form-urlencoded\n");
+    client.print("Content-Length: ");
+    client.print(data_to_send.length());
+    client.print("\n\n");
+    client.print(data_to_send);
+    digitalWrite(led,HIGH);
+    delay(100);
+    digitalWrite(led,LOW);
+    delay(1000);
   }
 
+  client.stop();
+
+}
+
+uint16_t get_loudness_value() {
+  uint16_t ADC_LOUDNESS_VALUE=0;
+  Wire.beginTransmission(LOUDNESS_qwiicAddress);
+  Wire.write(COMMAND_LOUDNESS_GET_VALUE); // command for status
+  Wire.endTransmission();    // stop transmitting //this looks like it was essential.
+
+  Wire.requestFrom(LOUDNESS_qwiicAddress, 2);    // request 1 bytes from slave device qwiicAddress
+
+  while (Wire.available()) { // slave may send less than requested
+  uint8_t ADC_VALUE_L = Wire.read(); 
+  uint8_t ADC_VALUE_H = Wire.read();
+  ADC_LOUDNESS_VALUE=ADC_VALUE_H;
+  ADC_LOUDNESS_VALUE<<=8;
+  ADC_LOUDNESS_VALUE|=ADC_VALUE_L;
+  Serial.print("ADC_LOUDNESS_VALUE:  ");
+  Serial.println(ADC_LOUDNESS_VALUE,DEC);
+  }
+  uint16_t x=Wire.read(); 
+  return ADC_LOUDNESS_VALUE;
+}
+
+void testForConnectivity() {
+  Wire.beginTransmission(LOUDNESS_qwiicAddress);
+  //check here for an ACK from the slave, if no ACK don't allow change?
+  if (Wire.endTransmission() != 0) {
+    Serial.println("Check connections. No slave attached.");
+    while (1);
+  }
+}
