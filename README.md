@@ -1,5 +1,5 @@
 # Zio Qwiic Indoor Environment Sensors Kit
-![](IESK-Kit.jpg)
+![](A-750x750.JPG)
 
 Don't have the kit yet? Purchase them [here](https://www.smart-prototyping.com/Zio-Qwiic-Indoor-Environment-Sensor-Kit)!
 
@@ -15,13 +15,18 @@ Don’t neglect your health by ignoring the indoor quality where you live! This 
 
 We use  Arduino compatible PsyFi32 (ESP32) as the kit’s brain, and also includes all the necessary components for this kit, including:
 
-- [Zio Qwiic RTC Module](https://www.smart-prototyping.com/Zio-Qwiic-RTC-module-DS3231)
-- [Zio Qwiic 0.91” OLED Display](https://www.smart-prototyping.com/Zuino-XS-PsyFi32.html)
-- [Zio Qwiic LiPo Battery Manager](https://www.smart-prototyping.com/Zio-OLED-Display-0-91-in-128-32-Qwiic.html)
-- [Zio Qwiic Battery Case](https://www.smart-prototyping.com/Zio-Qwiic-Hub.html)
+- [Zuino XS PsyFi32](https://www.smart-prototyping.com/Zuino-XS-PsyFi32.html)
+- [Zio Qwiic 0.91” OLED Display](https://www.smart-prototyping.com/Zio-OLED-Display-0-91-in-128-32-Qwiic.html)
+- [Zio Qwiic Hat for Raspberry Pi](https://www.smart-prototyping.com/Zio-Qwiic-Hat-for-Raspberry-Pi)
+- [Zio Qwiic Power Adapter LM2596](https://www.smart-prototyping.com/Zio-Qwiic-Power-Adapter-LM2596)
+- [Zio Qwiic Hub](https://www.smart-prototyping.com/Zio-Qwiic-Hub.html)
 - [USB Cable](https://www.smart-prototyping.com/5pcs-Micro-USB-Cable)
 - [Qwiic Cable](https://www.smart-prototyping.com/Qwiic-200mm-Cable-10pcs)
-
+    5 x 5cm
+    5 x 10cm
+    10 x 20cm
+    5 x 50cm
+    2 x 15cm male header cable
 
 Monitoring the quality of Indoor Environment helps improves health, quality of life, reduce stress and potential injuries at home, work or building. Improve your health and quality of life with our latest instalment of Zio Qwiic Indoor Environment Sensors Kit today!
 
