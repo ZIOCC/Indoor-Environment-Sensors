@@ -21,7 +21,7 @@ We use  Arduino compatible PsyFi32 (ESP32) as the kit’s brain, and also includ
 - [Zio Qwiic Power Adapter LM2596](https://www.smart-prototyping.com/Zio-Qwiic-Power-Adapter-LM2596)
 - [Zio Qwiic Hub](https://www.smart-prototyping.com/Zio-Qwiic-Hub.html)
 - [USB Cable](https://www.smart-prototyping.com/5pcs-Micro-USB-Cable)
-- [Qwiic Cable](https://www.smart-prototyping.com/Qwiic-200mm-Cable-10pcs)
+- [Qwiic Cable](https://www.smart-prototyping.com/Qwiic-200mm-Cable-10pcs):
     5 x 5cm
     5 x 10cm
     10 x 20cm
